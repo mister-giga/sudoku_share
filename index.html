@@ -116,10 +116,10 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 
 /* share */
 #qrBox{background:#fff;padding:12px;border-radius:14px;display:flex;justify-content:center;box-shadow:0 0 0 1px rgba(0,0,0,.05)}
-#qrBox canvas{width:100%;height:auto;max-width:320px;image-rendering:pixelated}
+#qrBox canvas{width:100%;height:auto;max-width:280px;image-rendering:pixelated}
 #urlBox{
   margin-top:11px;width:100%;font-size:11px;color:#7a756a;background:#efece5;border:0;border-radius:10px;
-  padding:9px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:none;height:52px;line-height:1.5;
+  padding:9px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:none;height:76px;line-height:1.5;
   -webkit-user-select:text;user-select:text;
 }
 #shareNote{font-size:12px;color:#8a8578;text-align:center;margin-top:10px;line-height:1.45}
@@ -470,16 +470,15 @@ function shuffle(a) {
   return a;
 }
 
-/* solves grid (Int8Array 81, 0 = empty); stops once `limit` solutions are seen.
-   returns { count, first } where first is the first solution found (or null)   */
-function solve(grid, limit) {
+/* counts solutions of grid (Int8Array 81, 0 = empty), stopping at `limit` */
+function countSolutions(grid, limit) {
   const g = grid.slice();
   const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
   for (let i = 0; i < 81; i++) {
     const v = g[i];
     if (v) { const b = 1 << (v - 1); rows[(i / 9) | 0] |= b; cols[i % 9] |= b; box[BOX[i]] |= b; }
   }
-  let count = 0, first = null;
+  let count = 0;
   (function rec() {
     let best = -1, bestMask = 0, bestN = 10;
     for (let i = 0; i < 81; i++) {
@@ -488,7 +487,7 @@ function solve(grid, limit) {
       const n = POP[avail];
       if (n < bestN) { bestN = n; best = i; bestMask = avail; if (n <= 1) break; }
     }
-    if (best < 0) { count++; if (!first) first = g.slice(); return; }
+    if (best < 0) { count++; return; }
     if (bestN === 0) return;
     const r = (best / 9) | 0, c = best % 9, b = BOX[best];
     for (let d = 0; d < 9; d++) {
@@ -500,9 +499,8 @@ function solve(grid, limit) {
       if (count >= limit) return;
     }
   })();
-  return { count, first };
+  return count;
 }
-const countSolutions = (grid, limit) => solve(grid, limit).count;
 
 function makeSolution() {
   const g = new Int8Array(81);
@@ -542,103 +540,45 @@ function makePuzzle(diff) {
 }
 
 /* =====================================================================
-   PUZZLE -> URL CODE
-   The link is:  <page url>?q=<code>
-
-   The solution is NOT in the link. Only the printed board travels, packed as
-     81 bits  - one flag per square, 1 = this square is printed
-     4 bits   - per printed square, its digit
-   Those bits are scrambled with a fixed keystream and written in base64 (URL
-   alphabet), which comes out at 31-43 characters. The receiving device solves
-   the puzzle itself; because every puzzle we generate has exactly one
-   solution, it always arrives at the same answers.
+   PUZZLE <-> URL CODE
+   The link is:  <page url>?q=<base64 of a 162-character string>
+     chars   0..80  -> the full solution, row by row, one digit (1-9) per square
+     chars  81..161 -> the board as shown: the digit for a printed square, 0 for a blank
    ===================================================================== */
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-
-/* xorshift32 keystream, seeded only from the length -> scrambling is its own
-   inverse, and the bytes come out looking like noise instead of a board */
-function keystream(len) {
-  let x = (0x9e3779b9 ^ len) >>> 0;
-  const out = [];
-  for (let i = 0; i < len; i++) {
-    x ^= x << 13; x >>>= 0;
-    x ^= x >>> 17;
-    x ^= x << 5;  x >>>= 0;
-    out.push(x & 255);
-  }
-  return out;
+function b64encode(str) {                    // base64, URL-safe alphabet (- _ instead of + /)
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-const scramble = bytes => { const k = keystream(bytes.length); return bytes.map((b, i) => b ^ k[i]); };
-
-function bytesToB64(bytes) {
-  let out = '';
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i], b = bytes[i + 1], c = bytes[i + 2];
-    const n = (a << 16) | ((b || 0) << 8) | (c || 0);
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63];
-    if (b !== undefined) out += B64[(n >> 6) & 63];
-    if (c !== undefined) out += B64[n & 63];
-  }
-  return out;
-}
-function b64ToBytes(str) {
-  const s = str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const out = [];
-  for (let i = 0; i < s.length; i += 4) {
-    const c = [], k = Math.min(4, s.length - i);
-    if (k < 2) return null;
-    for (let j = 0; j < k; j++) { const v = B64.indexOf(s[i + j]); if (v < 0) return null; c.push(v); }
-    const n = (c[0] << 18) | ((c[1] || 0) << 12) | ((c[2] || 0) << 6) | (c[3] || 0);
-    out.push((n >> 16) & 255);
-    if (k > 2) out.push((n >> 8) & 255);
-    if (k > 3) out.push(n & 255);
-  }
-  return out;
+function b64decode(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return atob(s);
 }
 
-function encodePuzzle(given) {
-  const bits = [];
-  for (let i = 0; i < 81; i++) bits.push(given[i] ? 1 : 0);
-  for (let i = 0; i < 81; i++) {
-    if (!given[i]) continue;
-    const v = given[i] - 1;
-    for (let b = 3; b >= 0; b--) bits.push((v >> b) & 1);
-  }
-  while (bits.length % 8) bits.push(0);
-  const bytes = [];
-  for (let i = 0; i < bits.length; i += 8) { let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; bytes.push(v); }
-  return bytesToB64(scramble(bytes));
+function encodePuzzle(sol, given) {
+  let a = '', b = '';
+  for (let i = 0; i < 81; i++) { a += sol[i]; b += given[i] || 0; }
+  return b64encode(a + b);                   // 162 digits -> 216 base64 chars
 }
 
 function decodePuzzle(code) {
   try {
-    const raw = b64ToBytes(code);
-    if (!raw) return null;
-    const bytes = scramble(raw);
-    const bits = [];
-    for (const b of bytes) for (let i = 7; i >= 0; i--) bits.push((b >> i) & 1);
-    if (bits.length < 88) return null;
-
-    const given = new Int8Array(81), spots = [];
-    for (let i = 0; i < 81; i++) if (bits[i]) spots.push(i);
-    if (spots.length < 17 || spots.length > 80) return null;   // 17 is the fewest a unique puzzle can have
-    if (bits.length < 81 + 4 * spots.length) return null;
-
-    let p = 81;
-    const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
-    for (const i of spots) {
-      let v = 0;
-      for (let j = 0; j < 4; j++) v = (v << 1) | bits[p++];
-      if (v > 8) return null;
-      const d = v + 1, mk = 1 << v, r = (i / 9) | 0, c = i % 9, b = BOX[i];
-      if ((rows[r] & mk) || (cols[c] & mk) || (box[b] & mk)) return null;   // the printed board must be legal
-      rows[r] |= mk; cols[c] |= mk; box[b] |= mk;
-      given[i] = d;
+    const raw = b64decode(code);
+    if (raw.length !== 162 || !/^[0-9]{162}$/.test(raw)) return null;
+    const sol = new Int8Array(81), given = new Int8Array(81);
+    for (let i = 0; i < 81; i++) {
+      const d = raw.charCodeAt(i) - 48, g = raw.charCodeAt(81 + i) - 48;
+      if (d < 1 || d > 9) return null;       // the solution has no blanks
+      if (g !== 0 && g !== d) return null;   // a printed square must match the solution
+      sol[i] = d; given[i] = g;
     }
-
-    const { count, first } = solve(given, 2);
-    if (count !== 1) return null;              // must be a real puzzle with one answer
-    return { sol: first, given };
+    // the solution must be a legal complete grid
+    const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
+    for (let i = 0; i < 81; i++) {
+      const mk = 1 << (sol[i] - 1), r = (i / 9) | 0, c = i % 9, b = BOX[i];
+      if ((rows[r] & mk) || (cols[c] & mk) || (box[b] & mk)) return null;
+      rows[r] |= mk; cols[c] |= mk; box[b] |= mk;
+    }
+    return { sol, given };
   } catch (e) { return null; }
 }
 
@@ -767,7 +707,7 @@ function newGame(diff) {
 function loadPuzzle(sol, given, diff, fresh) {
   S.sol = sol; S.given = given; S.user = new Int8Array(81);
   S.revealed = false; S.sel = -1; S.diff = diff;
-  S.code = encodePuzzle(given);
+  S.code = encodePuzzle(sol, given);
   S.seconds = 0;
   $('#diffTag').textContent = diff;
   const url = shareUrl();
