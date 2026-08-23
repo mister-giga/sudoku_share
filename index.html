@@ -427,13 +427,15 @@ const QR = (function () {
         if (!res[r][c] && MASKS[mk](r, c)) cand[r][c] ^= 1;
       const fmt = bchFormat((1 << 3) | mk); // 01 = level L
       for (let i = 0; i < 15; i++) {
-        const bit = (fmt >> i) & 1;
+        const bit = (fmt >> (14 - i)) & 1;      // most significant bit first
         if (i < 6) cand[8][i] = bit;
         else if (i === 6) cand[8][7] = bit;
         else if (i === 7) cand[8][8] = bit;
         else if (i === 8) cand[7][8] = bit;
         else cand[14 - i][8] = bit;
-        if (i < 8) cand[size - 1 - i][8] = bit;
+        // second copy: bits 0-6 run up the left edge, bits 7-14 run along row 8.
+        // the split is at 7, not 8 - row size-8 column 8 is the dark module.
+        if (i < 7) cand[size - 1 - i][8] = bit;
         else cand[8][size - 15 + i] = bit;
       }
       cand[size - 8][8] = 1;
