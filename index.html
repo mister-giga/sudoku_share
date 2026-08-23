@@ -35,6 +35,12 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
   color:#8a8578;background:#e7e3db;padding:3px 8px;border-radius:999px;
 }
 #right{display:flex;align-items:center;gap:12px}
+#clock{
+  font-size:15px;font-weight:600;color:#6f6a60;font-variant-numeric:tabular-nums;
+  min-width:56px;text-align:right;
+}
+#clock.paused{color:#c8342b}
+#clock.paused::before{content:'\275A\275A ';font-size:9px;vertical-align:2px;letter-spacing:-1px}
 #menuBtn{
   width:42px;height:42px;border-radius:12px;background:#fff;
   box-shadow:0 1px 2px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.05);
@@ -71,6 +77,16 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 .fix{
   position:absolute;top:2%;right:6%;font-size:calc(var(--cs)*.30);line-height:1;
   color:#1668c4;font-weight:700;font-variant-numeric:tabular-nums;
+}
+/* pencil notes */
+.notes{
+  position:absolute;inset:5%;display:none;pointer-events:none;
+  grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+}
+.notes i{
+  font-style:normal;font-size:calc(var(--cs)*.255);line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  color:#a9aeb6;font-weight:600;font-variant-numeric:tabular-nums;
 }
 
 /* "revealed" watermark - translucent, so the board still reads through it */
@@ -120,14 +136,36 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 .btn+.btn{margin-top:8px}
 
 /* number pad */
-#padSheet{max-width:min(340px,56vh)}
+#padSheet{max-width:min(340px,54vh)}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .num{
   aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
   font-size:clamp(24px,8vw,34px);font-weight:600;color:#1c1f24;background:#fff;border-radius:14px;
   box-shadow:0 1px 2px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.05);
 }
+.num{position:relative;overflow:hidden;-webkit-touch-callout:none}
 .num:active{background:#e9e4d6;transform:scale(.96)}
+.num.noted{background:#dfeada;box-shadow:0 0 0 2px #12873f inset,0 1px 2px rgba(0,0,0,.09)}
+.num.noted::after{content:'';position:absolute;top:7px;right:8px;width:6px;height:6px;border-radius:50%;background:#12873f}
+.num .fill{
+  position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(18,135,63,.20);
+  pointer-events:none;
+}
+.num.holding .fill{height:100%;transition:height 1s linear}
+.padhint{font-size:11.5px;color:#a09a8d;text-align:center;margin-top:11px;line-height:1.5}
+/* landscape phones: tighten the pad so it never has to scroll */
+@media (max-height:430px){
+  .ov{padding:8px}
+  #padSheet{padding:12px}
+  .sh-title{margin:0 0 8px}
+  .pad{gap:7px}
+  .padfoot{margin-top:8px}
+  .padhint{display:none}          /* the gesture hint is a nicety; space is scarcer here */
+  .btn{padding:11px 10px}
+  .grp{margin-bottom:9px}
+  .grp-lab{margin:0 4px 5px}
+  #padSheet{max-width:min(340px,50vh)}
+}
 .padfoot{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px}
 
 /* share */
@@ -164,6 +202,7 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 <div id="bar">
   <div id="brand"><div id="title">Sudoku</div><div id="diffTag">medium</div></div>
   <div id="right">
+    <div id="clock">0:00</div>
     <button id="menuBtn" aria-label="Menu"><i></i><i></i><i></i></button>
   </div>
 </div>
@@ -178,6 +217,7 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
     <button class="btn" id="eraseBtn">Erase</button>
     <button class="btn dark" id="cancelBtn">Cancel</button>
   </div>
+  <div class="padhint">Tap to fill &middot; hold 1s to pencil a note</div>
 </div></div>
 
 <!-- menu -->
@@ -189,6 +229,13 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
       <button class="btn" data-new="easy">Easy</button>
       <button class="btn" data-new="medium">Medium</button>
       <button class="btn" data-new="hard">Hard</button>
+    </div>
+  </div>
+  <div class="grp">
+    <div class="grp-lab">Timer</div>
+    <div class="row3" style="grid-template-columns:1fr 1fr">
+      <button class="btn" id="timerBtn">Pause</button>
+      <button class="btn" id="timerReset">Restart</button>
     </div>
   </div>
   <div class="grp">
@@ -225,6 +272,16 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
     <span class="dot" style="background:#1668c4"></span>Blue — the correct answer you left blank
   </div>
   <button class="btn dark" id="resClose">Close</button>
+</div></div>
+
+<!-- confirm before wiping a board that has been written on -->
+<div class="ov" id="confirmOv"><div class="sheet">
+  <div class="res-icon">♻️</div>
+  <div class="res-head">Start a new game?</div>
+  <div class="res-sub">You have already written on this board. Everything you filled in will be lost.</div>
+  <div style="height:16px"></div>
+  <button class="btn dark" id="confirmYes">Yes, new board</button>
+  <button class="btn ghost" id="confirmNo">Keep playing</button>
 </div></div>
 
 <div id="busy"><div class="spin"></div></div>
@@ -607,7 +664,9 @@ const boardEl = $('#board'), wrapEl = $('#wrap');
 
 const S = {
   sol: null, given: null, user: new Int8Array(81),
-  revealed: false, sel: -1, code: '', diff: 'medium'
+  notes: new Int16Array(81),                 // one bit per pencilled digit
+  revealed: false, sel: -1, code: '', diff: 'medium',
+  time: 0, running: true                     // seconds elapsed, and whether the clock ticks
 };
 const cells = [];
 
@@ -615,7 +674,7 @@ const cells = [];
 for (let i = 0; i < 81; i++) {
   const d = document.createElement('div');
   d.className = 'cell';
-  d.innerHTML = '<span class="val"></span>';
+  d.innerHTML = '<span class="val"></span><span class="notes">' + '<i></i>'.repeat(9) + '</span>';
   d.addEventListener('click', () => onCellTap(i));
   boardEl.appendChild(d);
   cells.push(d);
@@ -688,31 +747,77 @@ function render() {
       allCorrect = false;
     }
     c.querySelector('.val').textContent = text;
+
+    // pencil notes: only while the square is empty and the answers are hidden
+    const noteEl = c.children[1], mask = S.notes[i];
+    const showNotes = !isGiven && !v && mask && !S.revealed;
+    noteEl.style.display = showNotes ? 'grid' : 'none';
+    if (showNotes) for (let k = 0; k < 9; k++) noteEl.children[k].textContent = (mask >> k) & 1 ? k + 1 : '';
   }
   boardEl.classList.toggle('solved', S.revealed && allCorrect);
   fit();
 }
 
-/* ---------- number pad ---------- */
+/* ---------- number pad: a tap fills the square, a long hold pencils a note ---------- */
+const HOLD_MS = 1000;
 const padEl = $('#pad');
+const padBtns = [];
 for (let n = 1; n <= 9; n++) {
   const b = document.createElement('button');
-  b.className = 'num'; b.textContent = n;
-  b.addEventListener('click', () => setCell(n));
+  b.className = 'num';
+  b.innerHTML = '<span class="fill"></span>' + n;
+  let holdId = null, held = false;
+
+  const beginHold = () => {
+    held = false;
+    b.classList.add('holding');
+    holdId = setTimeout(() => {
+      held = true; holdId = null;
+      b.classList.remove('holding');
+      toggleNote(n);
+    }, HOLD_MS);
+  };
+  const cancelHold = () => {
+    b.classList.remove('holding');
+    if (holdId) { clearTimeout(holdId); holdId = null; }
+  };
+
+  b.addEventListener('pointerdown', e => { e.preventDefault(); beginHold(); });
+  b.addEventListener('pointerup', () => { const wasHeld = held; cancelHold(); if (!wasHeld) setCell(n); });
+  b.addEventListener('pointerleave', cancelHold);
+  b.addEventListener('pointercancel', cancelHold);
   padEl.appendChild(b);
+  padBtns.push(b);
 }
+
+/* mark which digits are already pencilled into the selected square */
+function paintPad() {
+  const mask = S.sel >= 0 ? S.notes[S.sel] : 0;
+  padBtns.forEach((b, k) => b.classList.toggle('noted', !!((mask >> k) & 1)));
+}
+
 function onCellTap(i) {
   if (S.revealed || S.given[i]) return;
   S.sel = i;
   $('#padTitle').textContent = 'Row ' + (((i / 9) | 0) + 1) + ' · Column ' + ((i % 9) + 1);
   render();
+  paintPad();
   open('#padOv');
 }
-function setCell(n) {
-  if (S.sel >= 0) { S.user[S.sel] = n; save(); }
+function setCell(n) {                       // a plain tap replaces the notes with a real answer
+  if (S.sel >= 0) { S.user[S.sel] = n; S.notes[S.sel] = 0; save(); }
   closePad();
 }
-$('#eraseBtn').addEventListener('click', () => { if (S.sel >= 0) { S.user[S.sel] = 0; save(); } closePad(); });
+function toggleNote(n) {                    // a long hold adds or removes one pencil mark
+  if (S.sel < 0) return;
+  S.notes[S.sel] ^= 1 << (n - 1);
+  S.user[S.sel] = 0;                        // a square holding notes holds no answer
+  save(); render(); paintPad();
+}
+$('#eraseBtn').addEventListener('click', () => {
+  if (S.sel >= 0) { S.user[S.sel] = 0; S.notes[S.sel] = 0; save(); }
+  closePad();
+});
 $('#cancelBtn').addEventListener('click', closePad);
 function closePad() { close('#padOv'); S.sel = -1; render(); }
 
@@ -727,10 +832,18 @@ $('#menuClose').addEventListener('click', () => close('#menuOv'));
 $('#shareClose').addEventListener('click', () => close('#shareOv'));
 $('#resClose').addEventListener('click', () => close('#resOv'));
 
-/* ---------- new game ---------- */
+/* ---------- new game (asks first if the board has been written on) ---------- */
+const boardTouched = () => !S.revealed && (S.user.some(v => v) || S.notes.some(v => v));
+let pendingDiff = null;
 document.querySelectorAll('[data-new]').forEach(b => {
-  b.addEventListener('click', () => { close('#menuOv'); newGame(b.dataset.new); });
+  b.addEventListener('click', () => {
+    close('#menuOv');
+    if (boardTouched()) { pendingDiff = b.dataset.new; open('#confirmOv'); }
+    else newGame(b.dataset.new);
+  });
 });
+$('#confirmYes').addEventListener('click', () => { close('#confirmOv'); if (pendingDiff) newGame(pendingDiff); pendingDiff = null; });
+$('#confirmNo').addEventListener('click', () => { close('#confirmOv'); pendingDiff = null; });
 function newGame(diff) {
   $('#busy').classList.add('on');
   setTimeout(() => {
@@ -740,15 +853,19 @@ function newGame(diff) {
   }, 30);
 }
 function loadPuzzle(sol, given, diff, fresh) {
-  S.sol = sol; S.given = given; S.user = new Int8Array(81);
+  S.sol = sol; S.given = given; S.user = new Int8Array(81); S.notes = new Int16Array(81);
   S.revealed = false; S.sel = -1; S.diff = diff;
+  S.time = 0; S.running = true;                // a new board starts its clock straight away
   S.code = encodePuzzle(sol, given);
   $('#diffTag').textContent = diff;
   const url = shareUrl();
   try { history.replaceState(null, '', url); } catch (e) {}
-  if (!fresh) restore();
+  if (!fresh) restore();                       // brings back entries, notes and the clock
   if (wasRevealed(sol)) S.revealed = true;     // this board has already been given away
+  if (S.revealed) S.running = false;
   render();
+  paintClock();
+  startTicking();
   save();
 }
 
@@ -778,9 +895,9 @@ $('#copyBtn').addEventListener('click', async () => {
 /* ---------- reveal ---------- */
 $('#revealBtn').addEventListener('click', () => {
   close('#menuOv');
-  S.revealed = true; S.sel = -1;
+  S.revealed = true; S.sel = -1; S.running = false;
   markRevealed(S.sol);
-  save(); render();
+  save(); render(); paintClock();
   let ok = 0, bad = 0, miss = 0;
   for (let i = 0; i < 81; i++) {
     if (S.given[i]) continue;
@@ -799,11 +916,55 @@ $('#revealBtn').addEventListener('click', () => {
   open('#resOv');
 });
 
+/* ---------- the clock -------------------------------------------------
+   Time is accumulated from real timestamps rather than by counting ticks,
+   so a throttled background tab still keeps honest time.               */
+function fmtTime(t) {
+  const s = Math.floor(t), m = (s / 60) | 0;
+  return m >= 60 ? ((m / 60) | 0) + ':' + String(m % 60).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
+                 : m + ':' + String(s % 60).padStart(2, '0');
+}
+function paintClock() {
+  $('#clock').textContent = fmtTime(S.time);
+  $('#clock').classList.toggle('paused', !S.running && !S.revealed);
+  $('#timerBtn').textContent = S.running ? 'Pause' : 'Resume';
+}
+let tickId = null, lastTick = Date.now(), sinceSave = 0;
+function startTicking() {
+  if (tickId) return;
+  lastTick = Date.now();
+  tickId = setInterval(() => {
+    const now = Date.now(), dt = (now - lastTick) / 1000;
+    lastTick = now;
+    if (!S.running || S.revealed) return;
+    S.time += dt;
+    paintClock();
+    sinceSave += dt;
+    if (sinceSave >= 2) { sinceSave = 0; save(); }
+  }, 500);
+}
+$('#timerBtn').addEventListener('click', () => {
+  if (S.revealed) return;
+  S.running = !S.running;
+  lastTick = Date.now();
+  paintClock(); save();
+});
+$('#timerReset').addEventListener('click', () => {
+  S.time = 0; S.running = !S.revealed;
+  lastTick = Date.now();
+  paintClock(); save();
+});
+// never lose more than the current second to a refresh or a swipe away
+addEventListener('pagehide', save);
+addEventListener('visibilitychange', () => { lastTick = Date.now(); save(); });
+
 /* ---------- persistence (so a refresh doesn't lose the game) ---------- */
 function save() {
   try {
     localStorage.setItem('sud:' + S.code, JSON.stringify({
-      u: Array.from(S.user).join(''), d: S.diff
+      u: Array.from(S.user).join(''), d: S.diff,
+      n: Array.from(S.notes).join(','),
+      t: Math.round(S.time), r: S.running
     }));
   } catch (e) {}
 }
@@ -813,6 +974,12 @@ function restore() {
     if (!raw) return;
     const o = JSON.parse(raw);
     if (o.u && o.u.length === 81) for (let i = 0; i < 81; i++) S.user[i] = +o.u[i] || 0;
+    if (typeof o.n === 'string') {
+      const parts = o.n.split(',');
+      if (parts.length === 81) for (let i = 0; i < 81; i++) S.notes[i] = (+parts[i] || 0) & 0x1ff;
+    }
+    if (typeof o.t === 'number' && isFinite(o.t) && o.t >= 0) S.time = o.t;
+    if (typeof o.r === 'boolean') S.running = o.r;
   } catch (e) {}
 }
 
