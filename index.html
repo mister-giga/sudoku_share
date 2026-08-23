@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f4f2ee">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Sudoku</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html,body{
+  height:100%;width:100%;overflow:hidden;position:fixed;inset:0;
+  overscroll-behavior:none;touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;
+}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:#f4f2ee;color:#1c1f24;
+  display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer}
+
+/* ---------- top bar ---------- */
+#bar{
+  flex:0 0 auto;height:54px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;gap:10px;
+}
+#brand{display:flex;align-items:baseline;gap:9px;min-width:0}
+#title{font-size:19px;font-weight:700;letter-spacing:-.3px}
+#diffTag{
+  font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+  color:#8a8578;background:#e7e3db;padding:3px 8px;border-radius:999px;
+}
+#right{display:flex;align-items:center;gap:12px}
+#clock{font-size:15px;font-weight:600;color:#6f6a60;font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+#menuBtn{
+  width:42px;height:42px;border-radius:12px;background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.05);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+}
+#menuBtn i{display:block;width:17px;height:2px;border-radius:2px;background:#2b2f36}
+#menuBtn:active{transform:scale(.94)}
+
+/* ---------- board ---------- */
+#wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:0}
+#board{
+  --cs:40px;flex:0 0 auto;
+  display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);
+  background:#fff;border:2.5px solid #2b2f36;border-radius:8px;overflow:hidden;
+  box-shadow:0 6px 22px rgba(0,0,0,.10);
+}
+.cell{
+  position:relative;display:flex;align-items:center;justify-content:center;
+  border-right:1px solid #d6d9dd;border-bottom:1px solid #d6d9dd;background:#fff;
+}
+.cell:nth-child(9n){border-right:0}
+.cell:nth-child(9n+3),.cell:nth-child(9n+6){border-right:2.5px solid #2b2f36}
+.cell:nth-child(n+73){border-bottom:0}
+.cell:nth-child(n+19):nth-child(-n+27),.cell:nth-child(n+46):nth-child(-n+54){border-bottom:2.5px solid #2b2f36}
+.cell.sel{background:#e9e4d6}
+.val{font-size:calc(var(--cs)*.60);line-height:1;font-variant-numeric:tabular-nums}
+.cell.given .val{color:#111418;font-weight:600}
+.cell.user  .val{color:#9aa0a8;font-weight:500}
+/* reveal states */
+#board.rv .cell.user .val{color:#c8342b}
+#board.rv .cell.ok .val{color:#12873f}
+#board.rv .cell.miss .val{color:#1668c4;font-weight:500}
+#board.solved .val{color:#12873f !important}
+.fix{
+  position:absolute;top:2%;right:6%;font-size:calc(var(--cs)*.30);line-height:1;
+  color:#1668c4;font-weight:700;font-variant-numeric:tabular-nums;
+}
+
+/* ---------- overlays ---------- */
+.ov{
+  position:fixed;inset:0;z-index:50;display:none;
+  align-items:center;justify-content:center;padding:20px;
+  background:rgba(24,22,18,.46);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+}
+.ov.on{display:flex}
+.sheet{
+  width:100%;max-width:400px;max-height:100%;background:#fbfaf7;border-radius:20px;
+  padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.34);
+  animation:pop .16s ease-out;overflow:auto;
+}
+@keyframes pop{from{transform:translateY(14px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.sh-title{font-size:13px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:#8a8578;margin:2px 0 12px;text-align:center}
+
+/* menu */
+.grp{margin-bottom:14px}
+.grp-lab{font-size:11px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:#a09a8d;margin:0 4px 7px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.btn{
+  display:block;width:100%;padding:14px 12px;border-radius:13px;background:#fff;
+  font-size:15px;font-weight:600;color:#1c1f24;text-align:center;
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.05);
+}
+.btn:active{transform:scale(.97);background:#f1eee7}
+.btn.dark{background:#2b2f36;color:#fff;box-shadow:none}
+.btn.ghost{background:transparent;box-shadow:none;color:#7a756a;font-weight:600}
+.btn+.btn{margin-top:8px}
+
+/* number pad */
+#padSheet{max-width:min(340px,56vh)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.num{
+  aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(24px,8vw,34px);font-weight:600;color:#1c1f24;background:#fff;border-radius:14px;
+  box-shadow:0 1px 2px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.05);
+}
+.num:active{background:#e9e4d6;transform:scale(.96)}
+.padfoot{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px}
+
+/* share */
+#qrBox{background:#fff;padding:12px;border-radius:14px;display:flex;justify-content:center;box-shadow:0 0 0 1px rgba(0,0,0,.05)}
+#qrBox canvas{width:100%;height:auto;max-width:280px;image-rendering:pixelated}
+#urlBox{
+  margin-top:11px;width:100%;font-size:11px;color:#7a756a;background:#efece5;border:0;border-radius:10px;
+  padding:9px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:none;height:76px;line-height:1.5;
+  -webkit-user-select:text;user-select:text;
+}
+#shareNote{font-size:12px;color:#8a8578;text-align:center;margin-top:10px;line-height:1.45}
+
+/* reveal result */
+.res-icon{font-size:44px;text-align:center;line-height:1;margin:6px 0 8px}
+.res-head{font-size:24px;font-weight:700;text-align:center;letter-spacing:-.4px}
+.res-sub{font-size:14px;color:#7a756a;text-align:center;margin-top:6px;line-height:1.5}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 6px}
+.stat{background:#fff;border-radius:12px;padding:11px 6px;text-align:center;box-shadow:0 0 0 1px rgba(0,0,0,.05)}
+.stat b{display:block;font-size:21px;font-variant-numeric:tabular-nums}
+.stat span{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#a09a8d;margin-top:3px}
+.s-ok b{color:#12873f}.s-bad b{color:#c8342b}.s-miss b{color:#1668c4}
+.legend{font-size:11.5px;color:#8a8578;line-height:1.7;margin:12px 2px 14px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+
+/* busy */
+#busy{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(244,242,238,.9)}
+#busy.on{display:flex}
+.spin{width:34px;height:34px;border:3px solid #ddd8cd;border-top-color:#2b2f36;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="brand"><div id="title">Sudoku</div><div id="diffTag">medium</div></div>
+  <div id="right">
+    <div id="clock">0:00</div>
+    <button id="menuBtn" aria-label="Menu"><i></i><i></i><i></i></button>
+  </div>
+</div>
+
+<div id="wrap"><div id="board"></div></div>
+
+<!-- number pad -->
+<div class="ov" id="padOv"><div class="sheet" id="padSheet">
+  <div class="sh-title" id="padTitle">Enter number</div>
+  <div class="pad" id="pad"></div>
+  <div class="padfoot">
+    <button class="btn" id="eraseBtn">Erase</button>
+    <button class="btn dark" id="cancelBtn">Cancel</button>
+  </div>
+</div></div>
+
+<!-- menu -->
+<div class="ov" id="menuOv"><div class="sheet">
+  <div class="sh-title">Menu</div>
+  <div class="grp">
+    <div class="grp-lab">New game</div>
+    <div class="row3">
+      <button class="btn" data-new="easy">Easy</button>
+      <button class="btn" data-new="medium">Medium</button>
+      <button class="btn" data-new="hard">Hard</button>
+    </div>
+  </div>
+  <div class="grp">
+    <div class="grp-lab">This puzzle</div>
+    <button class="btn" id="shareBtn">Share &amp; QR code</button>
+    <button class="btn" id="revealBtn">Reveal answers</button>
+  </div>
+  <button class="btn ghost" id="menuClose">Close</button>
+</div></div>
+
+<!-- share -->
+<div class="ov" id="shareOv"><div class="sheet">
+  <div class="sh-title">Share this puzzle</div>
+  <div id="qrBox"><canvas id="qr"></canvas></div>
+  <div id="shareNote">Scan to open the exact same board.</div>
+  <textarea id="urlBox" readonly></textarea>
+  <button class="btn" id="copyBtn" style="margin-top:10px">Copy link</button>
+  <button class="btn ghost" id="shareClose">Close</button>
+</div></div>
+
+<!-- reveal result -->
+<div class="ov" id="resOv"><div class="sheet">
+  <div class="res-icon" id="resIcon">🔍</div>
+  <div class="res-head" id="resHead">Revealed</div>
+  <div class="res-sub" id="resSub"></div>
+  <div class="stats">
+    <div class="stat s-ok"><b id="stOk">0</b><span>Correct</span></div>
+    <div class="stat s-bad"><b id="stBad">0</b><span>Wrong</span></div>
+    <div class="stat s-miss"><b id="stMiss">0</b><span>Empty</span></div>
+  </div>
+  <div class="legend" id="legend">
+    <span class="dot" style="background:#12873f"></span>Green — your answer is correct<br>
+    <span class="dot" style="background:#c8342b"></span>Red — your answer is wrong (correct one in the corner)<br>
+    <span class="dot" style="background:#1668c4"></span>Blue — the correct answer you left blank
+  </div>
+  <button class="btn dark" id="resClose">Close</button>
+</div></div>
+
+<div id="busy"><div class="spin"></div></div>
+
+<script>
+/* =====================================================================
+   QR CODE ENCODER  — byte mode, ECC level L, versions 1..20.
+   Written from scratch, no dependencies.
+   ===================================================================== */
+const QR = (function () {
+  // GF(256) tables, primitive polynomial 0x11d
+  const EXP = new Array(512), LOG = new Array(256);
+  (function () {
+    let x = 1;
+    for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  })();
+  const mul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+
+  // version -> [ecCodewordsPerBlock, blocksGroup1, dataPerBlock1, blocksGroup2, dataPerBlock2]  (level L)
+  const ECB = {
+    1:[7,1,19,0,0],   2:[10,1,34,0,0],  3:[15,1,55,0,0],  4:[20,1,80,0,0],  5:[26,1,108,0,0],
+    6:[18,2,68,0,0],  7:[20,2,78,0,0],  8:[24,2,97,0,0],  9:[30,2,116,0,0], 10:[18,2,68,2,69],
+    11:[20,4,81,0,0], 12:[24,2,92,2,93],13:[26,4,107,0,0],14:[30,3,115,1,116],
+    15:[22,5,87,1,88],16:[24,5,98,1,99],17:[28,1,107,5,108],18:[30,5,120,1,121],
+    19:[28,3,113,4,114],20:[28,3,107,5,108]
+  };
+  const ALIGN = {
+    1:[],2:[6,18],3:[6,22],4:[6,26],5:[6,30],6:[6,34],7:[6,22,38],8:[6,24,42],9:[6,26,46],
+    10:[6,28,50],11:[6,30,54],12:[6,32,58],13:[6,34,62],14:[6,26,46,66],15:[6,26,48,70],
+    16:[6,26,50,74],17:[6,30,54,78],18:[6,30,56,82],19:[6,30,58,86],20:[6,34,62,90]
+  };
+
+  function genPoly(n) {
+    let g = [1];
+    for (let i = 0; i < n; i++) {
+      const ng = new Array(g.length + 1).fill(0);
+      for (let j = 0; j < g.length; j++) { ng[j] ^= g[j]; ng[j + 1] ^= mul(g[j], EXP[i]); }
+      g = ng;
+    }
+    return g;
+  }
+  function rsRemainder(data, ecLen) {
+    const g = genPoly(ecLen);
+    const buf = data.concat(new Array(ecLen).fill(0));
+    for (let i = 0; i < data.length; i++) {
+      const f = buf[i];
+      if (!f) continue;
+      for (let j = 0; j < g.length; j++) buf[i + j] ^= mul(g[j], f);
+    }
+    return buf.slice(data.length);
+  }
+
+  function bchFormat(dataBits) {         // 5 data bits -> 15 bit format info
+    let v = dataBits << 10;
+    for (let i = 14; i >= 10; i--) if ((v >> i) & 1) v ^= 0x537 << (i - 10);
+    return ((dataBits << 10) | v) ^ 0x5412;
+  }
+  function bchVersion(ver) {             // 6 data bits -> 18 bit version info
+    let v = ver << 12;
+    for (let i = 17; i >= 12; i--) if ((v >> i) & 1) v ^= 0x1f25 << (i - 12);
+    return (ver << 12) | v;
+  }
+
+  const MASKS = [
+    (r, c) => (r + c) % 2 === 0,
+    (r, c) => r % 2 === 0,
+    (r, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => ((r >> 1) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+    (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+    (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0
+  ];
+
+  function penalty(m) {
+    const n = m.length; let p = 0;
+    // rule 1: runs of 5+
+    for (let i = 0; i < n; i++) {
+      let rc = 1, cc = 1;
+      for (let j = 1; j < n; j++) {
+        if (m[i][j] === m[i][j - 1]) { rc++; } else { if (rc >= 5) p += 3 + rc - 5; rc = 1; }
+        if (m[j][i] === m[j - 1][i]) { cc++; } else { if (cc >= 5) p += 3 + cc - 5; cc = 1; }
+      }
+      if (rc >= 5) p += 3 + rc - 5;
+      if (cc >= 5) p += 3 + cc - 5;
+    }
+    // rule 2: 2x2 blocks
+    for (let i = 0; i < n - 1; i++) for (let j = 0; j < n - 1; j++) {
+      const v = m[i][j];
+      if (v === m[i][j + 1] && v === m[i + 1][j] && v === m[i + 1][j + 1]) p += 3;
+    }
+    // rule 3: finder-like patterns
+    const A = [1,0,1,1,1,0,1,0,0,0,0], B = [0,0,0,0,1,0,1,1,1,0,1];
+    for (let i = 0; i < n; i++) for (let j = 0; j <= n - 11; j++) {
+      let a = true, b = true, a2 = true, b2 = true;
+      for (let k = 0; k < 11; k++) {
+        if (m[i][j + k] !== A[k]) a = false;
+        if (m[i][j + k] !== B[k]) b = false;
+        if (m[j + k][i] !== A[k]) a2 = false;
+        if (m[j + k][i] !== B[k]) b2 = false;
+      }
+      if (a) p += 40; if (b) p += 40; if (a2) p += 40; if (b2) p += 40;
+    }
+    // rule 4: dark ratio
+    let dark = 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) dark += m[i][j];
+    const pct = dark * 100 / (n * n);
+    p += Math.floor(Math.abs(pct - 50) / 5) * 10;
+    return p;
+  }
+
+  function make(text) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+
+    let ver = 0;
+    for (let v = 1; v <= 20; v++) {
+      const e = ECB[v], total = e[1] * e[2] + e[3] * e[4];
+      if (4 + (v < 10 ? 8 : 16) + 8 * bytes.length <= total * 8) { ver = v; break; }
+    }
+    if (!ver) throw new Error('data too long for QR');
+
+    const [ecw, b1, d1, b2, d2] = ECB[ver];
+    const totalData = b1 * d1 + b2 * d2;
+
+    // --- bit stream ---
+    const bits = [];
+    const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+    push(4, 4);
+    push(bytes.length, ver < 10 ? 8 : 16);
+    for (const b of bytes) push(b, 8);
+    for (let i = 0; i < 4 && bits.length < totalData * 8; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    const dcw = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
+      dcw.push(v);
+    }
+    const PAD = [0xec, 0x11];
+    while (dcw.length < totalData) dcw.push(PAD[(dcw.length - (bits.length / 8)) % 2]);
+
+    // --- blocks + error correction ---
+    const blocks = [], ecs = [];
+    let off = 0;
+    for (let i = 0; i < b1; i++) { const bl = dcw.slice(off, off + d1); off += d1; blocks.push(bl); ecs.push(rsRemainder(bl, ecw)); }
+    for (let i = 0; i < b2; i++) { const bl = dcw.slice(off, off + d2); off += d2; blocks.push(bl); ecs.push(rsRemainder(bl, ecw)); }
+    const inter = [];
+    const maxLen = Math.max(d1, d2);
+    for (let i = 0; i < maxLen; i++) for (const bl of blocks) if (i < bl.length) inter.push(bl[i]);
+    for (let i = 0; i < ecw; i++) for (const e of ecs) inter.push(e[i]);
+
+    const stream = [];
+    for (const b of inter) for (let i = 7; i >= 0; i--) stream.push((b >> i) & 1);
+
+    // --- matrix skeleton ---
+    const size = 17 + 4 * ver;
+    const m = Array.from({ length: size }, () => new Array(size).fill(0));
+    const res = Array.from({ length: size }, () => new Array(size).fill(false));
+    const set = (r, c, v) => { m[r][c] = v; res[r][c] = true; };
+
+    function finder(r0, c0) {
+      for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+        const r1 = r0 + r, c1 = c0 + c;
+        if (r1 < 0 || c1 < 0 || r1 >= size || c1 >= size) continue;
+        const inSq = r >= 0 && r <= 6 && c >= 0 && c <= 6;
+        const on = inSq && (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+        set(r1, c1, on ? 1 : 0);
+      }
+    }
+    finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+
+    for (let i = 8; i < size - 8; i++) { set(6, i, i % 2 === 0 ? 1 : 0); set(i, 6, i % 2 === 0 ? 1 : 0); }
+
+    const ac = ALIGN[ver];
+    for (const r of ac) for (const c of ac) {
+      if ((r <= 8 && c <= 8) || (r <= 8 && c >= size - 9) || (r >= size - 9 && c <= 8)) continue;
+      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+        const on = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
+        set(r + dr, c + dc, on ? 1 : 0);
+      }
+    }
+
+    set(size - 8, 8, 1); // dark module
+    // reserve format areas
+    for (let i = 0; i < 9; i++) { if (!res[8][i]) set(8, i, 0); if (!res[i][8]) set(i, 8, 0); }
+    for (let i = 0; i < 8; i++) { if (!res[8][size - 1 - i]) set(8, size - 1 - i, 0); if (!res[size - 1 - i][8]) set(size - 1 - i, 8, 0); }
+    // version info areas
+    if (ver >= 7) {
+      const vb = bchVersion(ver);
+      for (let i = 0; i < 18; i++) {
+        const bit = (vb >> i) & 1, a = Math.floor(i / 3), b = size - 11 + (i % 3);
+        set(a, b, bit); set(b, a, bit);
+      }
+    }
+
+    // --- place data ---
+    let idx = 0, dir = -1, row = size - 1;
+    for (let col = size - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      while (true) {
+        for (let k = 0; k < 2; k++) {
+          const cc = col - k;
+          if (!res[row][cc]) { m[row][cc] = idx < stream.length ? stream[idx++] : 0; }
+        }
+        row += dir;
+        if (row < 0 || row >= size) { row -= dir; dir = -dir; break; }
+      }
+    }
+
+    // --- masking: pick lowest penalty ---
+    let best = null, bestScore = Infinity;
+    for (let mk = 0; mk < 8; mk++) {
+      const cand = m.map(r => r.slice());
+      for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
+        if (!res[r][c] && MASKS[mk](r, c)) cand[r][c] ^= 1;
+      const fmt = bchFormat((1 << 3) | mk); // 01 = level L
+      for (let i = 0; i < 15; i++) {
+        const bit = (fmt >> i) & 1;
+        if (i < 6) cand[8][i] = bit;
+        else if (i === 6) cand[8][7] = bit;
+        else if (i === 7) cand[8][8] = bit;
+        else if (i === 8) cand[7][8] = bit;
+        else cand[14 - i][8] = bit;
+        if (i < 8) cand[size - 1 - i][8] = bit;
+        else cand[8][size - 15 + i] = bit;
+      }
+      cand[size - 8][8] = 1;
+      const sc = penalty(cand);
+      if (sc < bestScore) { bestScore = sc; best = cand; }
+    }
+    return best;
+  }
+
+  function draw(canvas, text) {
+    const m = make(text), n = m.length, quiet = 4, total = n + quiet * 2;
+    const scale = Math.max(2, Math.floor(560 / total));
+    canvas.width = canvas.height = total * scale;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height);
+    g.fillStyle = '#000';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+      if (m[r][c]) g.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+  }
+
+  return { make, draw };
+})();
+
+/* =====================================================================
+   SUDOKU ENGINE
+   ===================================================================== */
+const BOX = new Int8Array(81);
+for (let i = 0; i < 81; i++) BOX[i] = ((i / 27) | 0) * 3 + (((i % 9) / 3) | 0);
+const POP = new Int8Array(512);
+for (let i = 0; i < 512; i++) POP[i] = (i & 1) + POP[i >> 1];
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+/* counts solutions of grid (Int8Array 81, 0 = empty), stopping at `limit` */
+function countSolutions(grid, limit) {
+  const g = grid.slice();
+  const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
+  for (let i = 0; i < 81; i++) {
+    const v = g[i];
+    if (v) { const b = 1 << (v - 1); rows[(i / 9) | 0] |= b; cols[i % 9] |= b; box[BOX[i]] |= b; }
+  }
+  let count = 0;
+  (function rec() {
+    let best = -1, bestMask = 0, bestN = 10;
+    for (let i = 0; i < 81; i++) {
+      if (g[i]) continue;
+      const avail = ~(rows[(i / 9) | 0] | cols[i % 9] | box[BOX[i]]) & 0x1ff;
+      const n = POP[avail];
+      if (n < bestN) { bestN = n; best = i; bestMask = avail; if (n <= 1) break; }
+    }
+    if (best < 0) { count++; return; }
+    if (bestN === 0) return;
+    const r = (best / 9) | 0, c = best % 9, b = BOX[best];
+    for (let d = 0; d < 9; d++) {
+      const mk = 1 << d;
+      if (!(bestMask & mk)) continue;
+      g[best] = d + 1; rows[r] |= mk; cols[c] |= mk; box[b] |= mk;
+      rec();
+      g[best] = 0; rows[r] ^= mk; cols[c] ^= mk; box[b] ^= mk;
+      if (count >= limit) return;
+    }
+  })();
+  return count;
+}
+
+function makeSolution() {
+  const g = new Int8Array(81);
+  const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
+  const order = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  (function rec(i) {
+    if (i === 81) return true;
+    const r = (i / 9) | 0, c = i % 9, b = BOX[i];
+    const avail = ~(rows[r] | cols[c] | box[b]) & 0x1ff;
+    const start = (Math.random() * 9) | 0;
+    for (let k = 0; k < 9; k++) {
+      const d = order[(start + k) % 9], mk = 1 << (d - 1);
+      if (!(avail & mk)) continue;
+      g[i] = d; rows[r] |= mk; cols[c] |= mk; box[b] |= mk;
+      if (rec(i + 1)) return true;
+      g[i] = 0; rows[r] ^= mk; cols[c] ^= mk; box[b] ^= mk;
+    }
+    return false;
+  })(0);
+  return g;
+}
+
+const TARGET = { easy: 42, medium: 32, hard: 25 };
+
+function makePuzzle(diff) {
+  const sol = makeSolution();
+  const given = sol.slice();
+  const target = TARGET[diff] || TARGET.medium;
+  let filled = 81;
+  for (const i of shuffle([...Array(81).keys()])) {
+    if (filled <= target) break;
+    const keep = given[i];
+    given[i] = 0;
+    if (countSolutions(given, 2) !== 1) { given[i] = keep; } else { filled--; }
+  }
+  return { sol, given };
+}
+
+/* =====================================================================
+   PUZZLE <-> URL CODE
+   The link is:  <page url>?q=<base64 of a 162-character string>
+     chars   0..80  -> the full solution, row by row, one digit (1-9) per square
+     chars  81..161 -> the board as shown: the digit for a printed square, 0 for a blank
+   ===================================================================== */
+function b64encode(str) {                    // base64, URL-safe alphabet (- _ instead of + /)
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64decode(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return atob(s);
+}
+
+function encodePuzzle(sol, given) {
+  let a = '', b = '';
+  for (let i = 0; i < 81; i++) { a += sol[i]; b += given[i] || 0; }
+  return b64encode(a + b);                   // 162 digits -> 216 base64 chars
+}
+
+function decodePuzzle(code) {
+  try {
+    const raw = b64decode(code);
+    if (raw.length !== 162 || !/^[0-9]{162}$/.test(raw)) return null;
+    const sol = new Int8Array(81), given = new Int8Array(81);
+    for (let i = 0; i < 81; i++) {
+      const d = raw.charCodeAt(i) - 48, g = raw.charCodeAt(81 + i) - 48;
+      if (d < 1 || d > 9) return null;       // the solution has no blanks
+      if (g !== 0 && g !== d) return null;   // a printed square must match the solution
+      sol[i] = d; given[i] = g;
+    }
+    // the solution must be a legal complete grid
+    const rows = new Int16Array(9), cols = new Int16Array(9), box = new Int16Array(9);
+    for (let i = 0; i < 81; i++) {
+      const mk = 1 << (sol[i] - 1), r = (i / 9) | 0, c = i % 9, b = BOX[i];
+      if ((rows[r] & mk) || (cols[c] & mk) || (box[b] & mk)) return null;
+      rows[r] |= mk; cols[c] |= mk; box[b] |= mk;
+    }
+    return { sol, given };
+  } catch (e) { return null; }
+}
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const boardEl = $('#board'), wrapEl = $('#wrap');
+
+const S = {
+  sol: null, given: null, user: new Int8Array(81),
+  revealed: false, sel: -1, code: '', diff: 'medium',
+  seconds: 0, ticking: false
+};
+const cells = [];
+
+/* ---------- build the 81 cells once ---------- */
+for (let i = 0; i < 81; i++) {
+  const d = document.createElement('div');
+  d.className = 'cell';
+  d.innerHTML = '<span class="val"></span>';
+  d.addEventListener('click', () => onCellTap(i));
+  boardEl.appendChild(d);
+  cells.push(d);
+}
+
+/* ---------- keep the board a max-size square, no scrolling ---------- */
+let lastFit = -1;
+function fit() {
+  const PAD = 20;   // breathing room around the board
+  const s = Math.floor(Math.min(wrapEl.clientWidth, wrapEl.clientHeight)) - PAD;
+  if (s <= 0 || s === lastFit) return;
+  lastFit = s;
+  boardEl.style.width = s + 'px';
+  boardEl.style.height = s + 'px';
+  boardEl.style.setProperty('--cs', (s / 9) + 'px');
+}
+addEventListener('resize', fit);
+addEventListener('orientationchange', () => setTimeout(fit, 120));
+if (window.visualViewport) visualViewport.addEventListener('resize', fit);
+if (window.ResizeObserver) new ResizeObserver(fit).observe(wrapEl);
+
+/* ---------- rendering ---------- */
+function render() {
+  boardEl.classList.toggle('rv', S.revealed);
+  let allCorrect = true;
+  for (let i = 0; i < 81; i++) {
+    const c = cells[i], isGiven = !!S.given[i];
+    const v = isGiven ? S.given[i] : S.user[i];
+    c.className = 'cell' + (isGiven ? ' given' : v ? ' user' : '');
+    if (i === S.sel) c.classList.add('sel');
+    const fix = c.querySelector('.fix');
+    if (fix) fix.remove();
+    let text = v ? String(v) : '';
+
+    if (S.revealed && !isGiven) {
+      if (v === S.sol[i]) {
+        c.classList.add('ok');
+      } else if (v) {                       // wrong: keep the wrong entry, show the answer in the corner
+        allCorrect = false;
+        const f = document.createElement('span');
+        f.className = 'fix'; f.textContent = S.sol[i];
+        c.appendChild(f);
+      } else {                              // blank: show the answer in place
+        allCorrect = false;
+        c.classList.add('miss');
+        text = String(S.sol[i]);
+      }
+    } else if (!isGiven && !v) {
+      allCorrect = false;
+    } else if (!isGiven && v !== S.sol[i]) {
+      allCorrect = false;
+    }
+    c.querySelector('.val').textContent = text;
+  }
+  boardEl.classList.toggle('solved', S.revealed && allCorrect);
+  fit();
+}
+
+/* ---------- number pad ---------- */
+const padEl = $('#pad');
+for (let n = 1; n <= 9; n++) {
+  const b = document.createElement('button');
+  b.className = 'num'; b.textContent = n;
+  b.addEventListener('click', () => setCell(n));
+  padEl.appendChild(b);
+}
+function onCellTap(i) {
+  if (S.revealed || S.given[i]) return;
+  S.sel = i;
+  $('#padTitle').textContent = 'Row ' + (((i / 9) | 0) + 1) + ' · Column ' + ((i % 9) + 1);
+  render();
+  open('#padOv');
+}
+function setCell(n) {
+  if (S.sel >= 0) { S.user[S.sel] = n; save(); }
+  closePad();
+}
+$('#eraseBtn').addEventListener('click', () => { if (S.sel >= 0) { S.user[S.sel] = 0; save(); } closePad(); });
+$('#cancelBtn').addEventListener('click', closePad);
+function closePad() { close('#padOv'); S.sel = -1; render(); }
+
+/* ---------- overlays ---------- */
+function open(sel) { $(sel).classList.add('on'); }
+function close(sel) { $(sel).classList.remove('on'); }
+document.querySelectorAll('.ov').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) { if (ov.id === 'padOv') closePad(); else close('#' + ov.id); } });
+});
+$('#menuBtn').addEventListener('click', () => open('#menuOv'));
+$('#menuClose').addEventListener('click', () => close('#menuOv'));
+$('#shareClose').addEventListener('click', () => close('#shareOv'));
+$('#resClose').addEventListener('click', () => close('#resOv'));
+
+/* ---------- new game ---------- */
+document.querySelectorAll('[data-new]').forEach(b => {
+  b.addEventListener('click', () => { close('#menuOv'); newGame(b.dataset.new); });
+});
+function newGame(diff) {
+  $('#busy').classList.add('on');
+  setTimeout(() => {
+    const p = makePuzzle(diff);
+    loadPuzzle(p.sol, p.given, diff, true);
+    $('#busy').classList.remove('on');
+  }, 30);
+}
+function loadPuzzle(sol, given, diff, fresh) {
+  S.sol = sol; S.given = given; S.user = new Int8Array(81);
+  S.revealed = false; S.sel = -1; S.diff = diff;
+  S.code = encodePuzzle(sol, given);
+  S.seconds = 0;
+  $('#diffTag').textContent = diff;
+  const url = shareUrl();
+  try { history.replaceState(null, '', url); } catch (e) {}
+  if (!fresh) restore();
+  render();
+  startClock();
+  save();
+}
+
+/* ---------- share ---------- */
+function baseUrl() { return location.href.split('#')[0].split('?')[0]; }
+function shareUrl() { return baseUrl() + '?q=' + S.code; }
+$('#shareBtn').addEventListener('click', () => {
+  close('#menuOv');
+  const url = shareUrl();
+  $('#urlBox').value = url;
+  try {
+    QR.draw($('#qr'), url);
+    $('#shareNote').textContent = 'Scan to open the exact same board.';
+  } catch (e) {
+    $('#shareNote').textContent = 'This page URL is too long to fit in a QR code — use the link below.';
+  }
+  open('#shareOv');
+});
+$('#copyBtn').addEventListener('click', async () => {
+  const url = shareUrl(), btn = $('#copyBtn');
+  try { await navigator.clipboard.writeText(url); }
+  catch (e) { const t = $('#urlBox'); t.focus(); t.select(); try { document.execCommand('copy'); } catch (e2) {} }
+  btn.textContent = 'Copied';
+  setTimeout(() => { btn.textContent = 'Copy link'; }, 1400);
+});
+
+/* ---------- reveal ---------- */
+$('#revealBtn').addEventListener('click', () => {
+  close('#menuOv');
+  S.revealed = true; S.sel = -1;
+  stopClock(); save(); render();
+  let ok = 0, bad = 0, miss = 0;
+  for (let i = 0; i < 81; i++) {
+    if (S.given[i]) continue;
+    if (!S.user[i]) miss++;
+    else if (S.user[i] === S.sol[i]) ok++;
+    else bad++;
+  }
+  $('#stOk').textContent = ok; $('#stBad').textContent = bad; $('#stMiss').textContent = miss;
+  const perfect = bad === 0 && miss === 0;
+  $('#resIcon').textContent = perfect ? '🏆' : '🔍';
+  $('#resHead').textContent = perfect ? 'Solved!' : 'Revealed';
+  $('#resSub').textContent = perfect
+    ? 'Every square is correct — finished in ' + fmt(S.seconds) + '.'
+    : 'The answers are on the board now. Time: ' + fmt(S.seconds) + '.';
+  $('#legend').style.display = perfect ? 'none' : '';
+  open('#resOv');
+});
+
+/* ---------- clock ---------- */
+function fmt(s) { const m = (s / 60) | 0; return m + ':' + String(s % 60).padStart(2, '0'); }
+let clockId = null;
+function startClock() {
+  stopClock();
+  $('#clock').textContent = fmt(S.seconds);
+  clockId = setInterval(() => {
+    if (document.hidden || S.revealed) return;
+    S.seconds++;
+    $('#clock').textContent = fmt(S.seconds);
+    if (S.seconds % 5 === 0) save();
+  }, 1000);
+}
+function stopClock() { if (clockId) { clearInterval(clockId); clockId = null; } }
+
+/* ---------- persistence (so a refresh doesn't lose the game) ---------- */
+function save() {
+  try {
+    localStorage.setItem('sud:' + S.code, JSON.stringify({
+      u: Array.from(S.user).join(''), t: S.seconds, r: S.revealed, d: S.diff
+    }));
+  } catch (e) {}
+}
+function restore() {
+  try {
+    const raw = localStorage.getItem('sud:' + S.code);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o.u && o.u.length === 81) for (let i = 0; i < 81; i++) S.user[i] = +o.u[i] || 0;
+    S.seconds = o.t || 0;
+    S.revealed = !!o.r;
+  } catch (e) {}
+}
+
+/* ---------- no keyboard, no zoom, no scroll ---------- */
+addEventListener('keydown', e => {          // the game never reads the keyboard
+  if (e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+  e.preventDefault();
+}, { passive: false });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+addEventListener('dblclick', e => e.preventDefault());
+
+/* ---------- boot ---------- */
+(function boot() {
+  const m = location.search.match(/[?&]q=([A-Za-z0-9+/=_-]+)/);
+  const p = m ? decodePuzzle(m[1]) : null;
+  if (p) {
+    let n = 0; for (let i = 0; i < 81; i++) if (p.given[i]) n++;
+    loadPuzzle(p.sol, p.given, n >= 38 ? 'easy' : n >= 30 ? 'medium' : 'hard', false);
+  } else {
+    newGame('medium');
+  }
+  fit();
+})();
+</script>
+</body>
+</html>
