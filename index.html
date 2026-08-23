@@ -35,7 +35,6 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
   color:#8a8578;background:#e7e3db;padding:3px 8px;border-radius:999px;
 }
 #right{display:flex;align-items:center;gap:12px}
-#clock{font-size:15px;font-weight:600;color:#6f6a60;font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
 #menuBtn{
   width:42px;height:42px;border-radius:12px;background:#fff;
   box-shadow:0 1px 2px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.05);
@@ -47,7 +46,7 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 /* ---------- board ---------- */
 #wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:0}
 #board{
-  --cs:40px;flex:0 0 auto;
+  --cs:40px;flex:0 0 auto;position:relative;
   display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);
   background:#fff;border:2.5px solid #2b2f36;border-radius:8px;overflow:hidden;
   box-shadow:0 6px 22px rgba(0,0,0,.10);
@@ -72,6 +71,23 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 .fix{
   position:absolute;top:2%;right:6%;font-size:calc(var(--cs)*.30);line-height:1;
   color:#1668c4;font-weight:700;font-variant-numeric:tabular-nums;
+}
+
+/* "revealed" watermark - translucent, so the board still reads through it */
+#stamp{
+  position:absolute;inset:0;z-index:3;display:none;
+  align-items:center;justify-content:center;pointer-events:none;
+  background:rgba(244,242,238,.34);
+}
+#board.rv #stamp{display:flex}
+#stamp b{
+  transform:rotate(-15deg);
+  font-size:calc(var(--cs)*.92);font-weight:800;letter-spacing:.12em;
+  color:rgba(200,52,43,.52);
+  border:calc(var(--cs)*.07) solid rgba(200,52,43,.38);
+  border-radius:calc(var(--cs)*.16);
+  padding:calc(var(--cs)*.10) calc(var(--cs)*.24);
+  white-space:nowrap;text-transform:uppercase;
 }
 
 /* ---------- overlays ---------- */
@@ -148,7 +164,6 @@ button{font-family:inherit;border:0;background:none;color:inherit;cursor:pointer
 <div id="bar">
   <div id="brand"><div id="title">Sudoku</div><div id="diffTag">medium</div></div>
   <div id="right">
-    <div id="clock">0:00</div>
     <button id="menuBtn" aria-label="Menu"><i></i><i></i><i></i></button>
   </div>
 </div>
@@ -592,8 +607,7 @@ const boardEl = $('#board'), wrapEl = $('#wrap');
 
 const S = {
   sol: null, given: null, user: new Int8Array(81),
-  revealed: false, sel: -1, code: '', diff: 'medium',
-  seconds: 0, ticking: false
+  revealed: false, sel: -1, code: '', diff: 'medium'
 };
 const cells = [];
 
@@ -606,6 +620,25 @@ for (let i = 0; i < 81; i++) {
   boardEl.appendChild(d);
   cells.push(d);
 }
+
+const stamp = document.createElement('div');
+stamp.id = 'stamp';
+stamp.innerHTML = '<b>Revealed</b>';
+boardEl.appendChild(stamp);          // last child: keeps .cell:nth-child(...) borders intact
+
+/* ---------- remembering that a board was revealed -----------------------
+   Keyed by the solved board itself, so it sticks to the puzzle rather than
+   to the link, and survives refreshes, new tabs and browser restarts.    */
+function boardKey(sol) {
+  let a = 0x811c9dc5, b = 0x01000193;                 // two FNV-1a streams -> 64 bits
+  for (let i = 0; i < 81; i++) {
+    a ^= sol[i]; a = Math.imul(a, 0x01000193) >>> 0;
+    b ^= sol[i] + i; b = Math.imul(b, 0x85ebca6b) >>> 0;
+  }
+  return 'sudoku:revealed:' + a.toString(36) + b.toString(36);
+}
+const wasRevealed = sol => { try { return localStorage.getItem(boardKey(sol)) === '1'; } catch (e) { return false; } };
+const markRevealed = sol => { try { localStorage.setItem(boardKey(sol), '1'); } catch (e) {} };
 
 /* ---------- keep the board a max-size square, no scrolling ---------- */
 let lastFit = -1;
@@ -710,13 +743,12 @@ function loadPuzzle(sol, given, diff, fresh) {
   S.sol = sol; S.given = given; S.user = new Int8Array(81);
   S.revealed = false; S.sel = -1; S.diff = diff;
   S.code = encodePuzzle(sol, given);
-  S.seconds = 0;
   $('#diffTag').textContent = diff;
   const url = shareUrl();
   try { history.replaceState(null, '', url); } catch (e) {}
   if (!fresh) restore();
+  if (wasRevealed(sol)) S.revealed = true;     // this board has already been given away
   render();
-  startClock();
   save();
 }
 
@@ -747,7 +779,8 @@ $('#copyBtn').addEventListener('click', async () => {
 $('#revealBtn').addEventListener('click', () => {
   close('#menuOv');
   S.revealed = true; S.sel = -1;
-  stopClock(); save(); render();
+  markRevealed(S.sol);
+  save(); render();
   let ok = 0, bad = 0, miss = 0;
   for (let i = 0; i < 81; i++) {
     if (S.given[i]) continue;
@@ -760,32 +793,17 @@ $('#revealBtn').addEventListener('click', () => {
   $('#resIcon').textContent = perfect ? '🏆' : '🔍';
   $('#resHead').textContent = perfect ? 'Solved!' : 'Revealed';
   $('#resSub').textContent = perfect
-    ? 'Every square is correct — finished in ' + fmt(S.seconds) + '.'
-    : 'The answers are on the board now. Time: ' + fmt(S.seconds) + '.';
+    ? 'Every square is correct.'
+    : 'The answers are on the board now.';
   $('#legend').style.display = perfect ? 'none' : '';
   open('#resOv');
 });
-
-/* ---------- clock ---------- */
-function fmt(s) { const m = (s / 60) | 0; return m + ':' + String(s % 60).padStart(2, '0'); }
-let clockId = null;
-function startClock() {
-  stopClock();
-  $('#clock').textContent = fmt(S.seconds);
-  clockId = setInterval(() => {
-    if (document.hidden || S.revealed) return;
-    S.seconds++;
-    $('#clock').textContent = fmt(S.seconds);
-    if (S.seconds % 5 === 0) save();
-  }, 1000);
-}
-function stopClock() { if (clockId) { clearInterval(clockId); clockId = null; } }
 
 /* ---------- persistence (so a refresh doesn't lose the game) ---------- */
 function save() {
   try {
     localStorage.setItem('sud:' + S.code, JSON.stringify({
-      u: Array.from(S.user).join(''), t: S.seconds, r: S.revealed, d: S.diff
+      u: Array.from(S.user).join(''), d: S.diff
     }));
   } catch (e) {}
 }
@@ -795,8 +813,6 @@ function restore() {
     if (!raw) return;
     const o = JSON.parse(raw);
     if (o.u && o.u.length === 81) for (let i = 0; i < 81; i++) S.user[i] = +o.u[i] || 0;
-    S.seconds = o.t || 0;
-    S.revealed = !!o.r;
   } catch (e) {}
 }
 
